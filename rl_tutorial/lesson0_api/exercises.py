@@ -22,6 +22,12 @@ def episode_return(
 
         G = r_1 + gamma * r_2 + gamma^2 * r_3 + ...
 
+    In words: add up every reward in the episode, but scale each one by
+    ``gamma`` raised to how many steps away it is. The first reward counts in
+    full (``gamma^0 == 1``), the second counts ``gamma`` times, the third
+    ``gamma^2`` times, and so on -- so later rewards matter geometrically
+    less. See the lesson README for a step-by-step walk through this notation.
+
     Args:
         env: The environment.
         policy: Callable mapping observation -> action.
@@ -30,9 +36,16 @@ def episode_return(
 
     Hints:
         - Keep a running ``discount`` that starts at 1.0 and is multiplied by
-          ``gamma`` after each step. Do NOT use ``gamma ** t`` -- it is slower
-          and loses precision for long episodes.
-        - Stop when ``terminated or truncated``.
+          ``gamma`` after each step, so it holds 1, gamma, gamma^2, ... in
+          turn. Add ``discount * reward`` each step. Do NOT use ``gamma ** t``
+          -- it is slower and loses precision for long episodes.
+        - Multiply ``discount`` AFTER accumulating, not before, or the first
+          reward gets discounted when it should count in full.
+        - Check ``terminated or truncated`` AFTER accumulating too. The final
+          step still pays a reward -- CartPole awards +1 even on the step the
+          pole topples -- so breaking out of the loop before adding it silently
+          loses one reward and your return comes up exactly 1 short. (With
+          ``gamma=0.0`` the bug is invisible, which is how it survives.)
 
     Sanity checks:
         - ``gamma=1.0`` on CartPole gives exactly the episode length (every
@@ -40,6 +53,7 @@ def episode_return(
         - ``gamma=0.99`` saturates near ``1 / (1 - gamma) == 100`` however long
           the episode runs, because the tail contributes almost nothing.
     """
+
     raise NotImplementedError("Exercise 1: implement episode_return")
 
 
@@ -63,22 +77,50 @@ class ObservationScaler(gym.ObservationWrapper):
         training badly. Rescaling is the cheapest fix.
 
     You must:
-        1. Store ``low`` and ``high`` as float arrays.
-        2. Override ``observation_space`` with a ``Box`` of -1..1 in the same
-           shape and dtype. Downstream code reads the SPACE to size networks,
-           so leaving the old space in place is a real bug, not cosmetic.
-        3. Implement ``observation`` to apply the mapping.
+        1. Store ``low`` and ``high`` as float32 arrays.
+        2. Set ``self.observation_space`` to a NEW ``Box`` whose bounds are
+           -1..1, in the same shape and dtype. Downstream code reads the SPACE
+           to size networks, so leaving the old one in place is a real bug.
+        3. Implement ``observation`` to apply the mapping and RETURN the
+           result.
+
+    A wrapper has TWO observation spaces, and the distinction matters:
+
+        self.env.observation_space   # the INNER env's -- CartPole's own
+                                     # +-4.8 etc. Leave it alone.
+        self.observation_space       # YOURS, the one callers see. This is
+                                     # the one you set, and it is already
+                                     # inherited from the inner env until you
+                                     # replace it.
+
+    A wrapper layers a new view on top of the env; it does not reach inside
+    and modify it. So assign to ``self.observation_space`` -- never to
+    ``self.env.observation_space``. (``super().__init__(env)`` already stores
+    the inner env as ``self.env``, so you do not need to do that yourself.)
 
     Note:
         ``gym.ObservationWrapper`` calls ``self.observation(obs)`` for you on
         both ``reset`` and ``step`` -- you only implement the transform.
+
+        Keep the two kinds of thing separate: the SPACE is metadata describing
+        the data's shape and range, set once in ``__init__``. The OBSERVATION
+        is the data itself, computed fresh every step. ``observation()``
+        should compute the scaled array and ``return`` it -- it must not
+        assign anything to ``self.observation_space``.
     """
 
     def __init__(self, env: gym.Env, low, high) -> None:
         super().__init__(env)
-        # TODO: store bounds as float32 arrays and replace self.observation_space
+        # TODO: store bounds as float32 arrays, then replace
+        #       self.observation_space (the WRAPPER's own, not self.env's)
+        #       with gym.spaces.Box(low=-1.0, high=1.0, ...)
         raise NotImplementedError("Exercise 2: implement ObservationScaler.__init__")
 
     def observation(self, obs: np.ndarray) -> np.ndarray:
-        """Map a raw observation into [-1, 1]."""
+        """Map a raw observation into [-1, 1] and return it.
+
+        Compute and ``return`` the scaled array. Do not touch
+        ``self.observation_space`` here -- that was set once in ``__init__``
+        and describes the data; this function produces the data.
+        """
         raise NotImplementedError("Exercise 2: implement ObservationScaler.observation")

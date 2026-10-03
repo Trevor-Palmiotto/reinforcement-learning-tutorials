@@ -133,7 +133,9 @@ uv run tensorboard --logdir runs
 
 ## What to expect
 
-CartPole-v1 is solved at a mean return of 475 over 100 episodes. With the
+CartPole-v1 is conventionally called solved at a mean return of 475 over 100
+episodes — a round 95% of the step cap rather than a derived figure, as
+Lesson 0 explains. With the
 shipped hyperparameters the best checkpoint reaches **500 (the maximum) on
 every seed tested**, for both DQN and Double DQN.
 

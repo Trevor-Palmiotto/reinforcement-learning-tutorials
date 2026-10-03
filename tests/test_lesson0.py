@@ -38,6 +38,13 @@ class TestEpisodeReturn:
             exercises.episode_return, env, heuristic_policy, gamma=1.0, seed=0
         )
         _, steps, _ = rollout(env, heuristic_policy, seed=0)
+        if total == pytest.approx(float(steps) - 1.0):
+            pytest.fail(
+                f"got {total}, expected {steps} -- exactly one reward short. "
+                "You are probably breaking out of the loop on "
+                "`terminated or truncated` BEFORE adding that step's reward. "
+                "The final step still pays: accumulate first, then break."
+            )
         assert total == pytest.approx(float(steps))
 
     def test_gamma_zero_keeps_only_first_reward(self, env):
@@ -68,14 +75,55 @@ class TestObservationScaler:
     def _make(self, env):
         return _skip_if_stub(exercises.ObservationScaler, env, self.LOW, self.HIGH)
 
+    @staticmethod
+    def _observe(wrapped, obs):
+        """Call observation() and fail clearly if it returned the wrong thing."""
+        out = wrapped.observation(obs)
+        if not isinstance(out, np.ndarray):
+            pytest.fail(
+                f"observation() returned a {type(out).__name__}, expected a numpy "
+                "array. It should COMPUTE and RETURN the scaled observation -- "
+                "if you assigned the result to self.observation_space and "
+                "returned that, you are returning the space (metadata) instead "
+                "of the data."
+            )
+        return out
+
     def test_observation_space_is_replaced(self, env):
         """Downstream code sizes networks from the space, not from the values."""
         wrapped = self._make(env)
         space = wrapped.observation_space
-        assert isinstance(space, gym.spaces.Box)
+
+        if not isinstance(space, gym.spaces.Box):
+            pytest.fail(
+                f"wrapped.observation_space is a {type(space).__name__}, not a Box. "
+                "Something assigned a non-Space to it -- most likely "
+                "`observation()` is assigning to self.observation_space instead "
+                "of returning the scaled array."
+            )
         assert space.shape == env.observation_space.shape
+        if np.allclose(space.high, env.observation_space.high):
+            pytest.fail(
+                "wrapped.observation_space still has the INNER env's bounds. "
+                "Set `self.observation_space` (the wrapper's own) to a new "
+                "Box(low=-1.0, high=1.0, ...) -- not `self.env.observation_space`, "
+                "and not a Box built from the `low`/`high` arguments."
+            )
         np.testing.assert_allclose(space.low, -1.0)
         np.testing.assert_allclose(space.high, 1.0)
+
+    def test_inner_env_space_is_not_mutated(self, env):
+        """A wrapper layers a view on top; it must not modify what it wraps."""
+        original_high = np.array(env.observation_space.high, copy=True)
+        wrapped = self._make(env)
+        np.testing.assert_allclose(
+            wrapped.env.observation_space.high,
+            original_high,
+            err_msg=(
+                "the inner env's observation_space was changed. Assign to "
+                "self.observation_space, not self.env.observation_space."
+            ),
+        )
 
     def test_reset_observation_is_in_range(self, env):
         wrapped = self._make(env)
@@ -94,13 +142,13 @@ class TestObservationScaler:
         wrapped = self._make(env)
         midpoint = (self.LOW + self.HIGH) / 2.0
         np.testing.assert_allclose(
-            wrapped.observation(midpoint), np.zeros(4), atol=1e-6
+            self._observe(wrapped, midpoint), np.zeros(4), atol=1e-6
         )
 
     def test_bounds_map_to_minus_one_and_one(self, env):
         wrapped = self._make(env)
-        np.testing.assert_allclose(wrapped.observation(self.LOW), -np.ones(4), atol=1e-6)
-        np.testing.assert_allclose(wrapped.observation(self.HIGH), np.ones(4), atol=1e-6)
+        np.testing.assert_allclose(self._observe(wrapped, self.LOW), -np.ones(4), atol=1e-6)
+        np.testing.assert_allclose(self._observe(wrapped, self.HIGH), np.ones(4), atol=1e-6)
 
 
 class TestReferenceSolution:

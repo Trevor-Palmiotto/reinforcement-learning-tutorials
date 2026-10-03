@@ -54,7 +54,10 @@ class DQNConfig:
     hidden: tuple[int, ...] = (128, 128)
     double: bool = False
     seed: int = 0
-    #: CartPole-v1 is "solved" at mean return 475 over 100 consecutive episodes.
+    #: CartPole-v1 is conventionally "solved" at mean return 475 over 100
+    #: consecutive episodes. This is a leaderboard convention, not a derived
+    #: quantity -- 475 is just 95% of the 500-step cap (see Lesson 0). It is
+    #: reported for orientation; the actual mean return is the real result.
     solve_threshold: float = 475.0
 
     #: Evaluate the greedy policy every N episodes and keep the best weights.
