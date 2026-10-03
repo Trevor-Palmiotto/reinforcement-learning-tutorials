@@ -30,6 +30,9 @@ def describe(env: gym.Env) -> None:
     print("  shape:", env.observation_space.shape)
     print("  low: ", np.round(env.observation_space.low, 2))
     print("  high:", np.round(env.observation_space.high, 2))
+    print("  slots: [x, x_dot, theta (rad), theta_dot]; inf = no declared bound")
+    print("  bounds are 2x the failure limits (|x| > 2.4, |theta| > 0.21 rad = 12 deg)")
+    print("  so the terminating obs still fits in the space")
     print("Action space:     ", env.action_space)
     print("  sample actions:", [env.action_space.sample() for _ in range(5)])
 
