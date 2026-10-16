@@ -8,35 +8,114 @@ reward, no credit assignment — pull an arm, get a reward, repeat. Everything
 that remains is the exploration problem, which is why bandits are where it is
 studied.
 
-## The problem
+## What a bandit is
 
-`k` arms. Arm `a` pays a reward drawn from a fixed distribution with unknown
-mean `q*(a)`. You pull `T` times. You want to maximise total reward.
-
-The tension: to know which arm is best you must sample all of them
-(**exploration**); to earn reward you should pull the one you currently believe
-is best (**exploitation**). Every pull spent exploring is a pull not spent
-earning, but every pull spent exploiting a wrong belief is worse.
-
-The standard scoreboard is **regret** — what you lost by not knowing the answer
-up front:
+The name is from slot machines — a "one-armed bandit." Picture a row of `k`
+slot machines. Each has its own fixed, unknown average payout. You get `T`
+pulls total, and you want to finish with as much money as possible.
 
 ```
-Regret(T) = T · max_a q*(a) − Σ_{t=1}^T E[r_t]
+      arm 0      arm 1      arm 2        ...     arm 9
+     ┌─────┐    ┌─────┐    ┌─────┐              ┌─────┐
+     │ ?   │    │ ?   │    │ ?   │              │ ?   │
+     └──┬──┘    └──┬──┘    └──┬──┘              └──┬──┘
+    pays ~0.2  pays ~1.5  pays ~-0.3          pays ~0.9
+      (hidden)   (hidden)   (hidden)            (hidden)
+
+   each pull: choose one arm, receive one noisy reward
 ```
 
-A good algorithm has regret growing like `log T`, not `T`. Linear regret means
-you are still making a constant rate of mistakes forever, which is exactly what
-fixed-ε ε-greedy does.
+You cannot see the averages. All you ever observe is the reward you got, and
+even that is noisy — pull the best arm and you might still get a bad payout by
+chance. The only way to learn anything is to pull arms and watch.
+
+### Reading the notation
+
+| Symbol | Spoken | Means |
+|---|---|---|
+| `k` | "kay" | how many arms (10 throughout this lesson) |
+| `a` | "a" | an action — which arm you pulled, an integer `0..k-1` |
+| `T` | "big tee" | the total number of pulls you get |
+| `t` | "little tee" | which pull you are on right now, `1..T` |
+| `q*(a)` | "q-star of a" | the **true** average payout of arm `a`. Fixed, and hidden from you. |
+| `Q_t(a)` | "Q-t of a" | **your estimate** of `q*(a)`, as of step `t`. This is what your code stores. |
+| `N(a)` | "n of a" | how many times you have pulled arm `a` so far |
+| `r_t` | "r-t" | the reward you actually received on pull `t` |
+
+The `*` in `q*` conventionally marks "the true/optimal thing" as opposed to
+your estimate — the same convention reappears in Lesson 2 as `Q*`, the optimal
+action-value function. **The whole game is making `Q` converge to `q*` while
+spending as few bad pulls as possible getting there.**
+
+## The core tension
+
+To know which arm is best you must sample all of them (**exploration**); to
+earn reward you should pull the one you currently believe is best
+(**exploitation**). Every pull spent exploring is a pull not spent earning, but
+every pull spent exploiting a wrong belief is worse.
+
+### Regret — the scoreboard
+
+**Regret** measures what your ignorance cost you: the reward you would have
+collected had you known the best arm from the start, minus what you actually
+collected.
+
+```
+Regret(T) = T · max_a q*(a)  −  Σ_{t=1}^T E[r_t]
+            └─ what a genie  ─┘  └─ what you ──┘
+               would collect        collect
+```
+
+Reading the pieces:
+
+- `max_a q*(a)` is the true average of the **best** arm. (`max_a` means "the
+  largest value over all choices of `a`".) Multiply by `T` for the genie's
+  total.
+- `Σ_{t=1}^T` is a sum over every pull from `t = 1` to `t = T` — the same sigma
+  notation as Lesson 0's return.
+- `E[r_t]` is the **expected** reward on pull `t` — "expected" meaning the
+  average over the randomness, since any single pull is noisy.
+
+Regret only ever goes up; the question is *how fast*. This is the real
+difference between the algorithms:
+
+| | regret at `t=1000` | at `t=4000` | growth when `t` doubles |
+|---|---|---|---|
+| ε-greedy (ε=0.1) | 226 | 706 | **1.83×** — nearly linear |
+| UCB (c=2) | 149 | 222 | **1.21×** — sublinear |
+
+(Measured with this code over 150 runs; you can reproduce it.)
+
+**Linear regret** means you keep making mistakes at a constant rate forever —
+double the time, double the loss. That is exactly what fixed-ε ε-greedy does,
+because it never stops pulling random arms. **Logarithmic regret** means
+mistakes become rarer as you learn, so the curve flattens. UCB achieves this.
 
 ## Estimating action values
 
-`Q_t(a)` is our estimate of `q*(a)`. The obvious estimator is the sample mean
-of rewards seen from `a`. Computed incrementally, so you never store history:
+`Q_t(a)` is our estimate of `q*(a)`. The obvious estimator is just the average
+of the rewards we have seen from arm `a` so far.
+
+The naive way is to keep a list of every reward and average it. That works but
+wastes memory, and it is unnecessary — you can keep a *running* average that
+updates in place. If `Q_n` is the average of the first `n−1` rewards and `R_n`
+is the new one:
 
 ```
 Q_{n+1} = Q_n + (1/n)·(R_n − Q_n)
 ```
+
+Here `n` counts pulls **of this particular arm**, not total steps, so this is
+`N(a)` from the table above. Worked through with rewards 1, 2, 6:
+
+| pull | reward `R_n` | old `Q_n` | error `R_n − Q_n` | step `1/n` | new `Q_{n+1}` |
+|---|---|---|---|---|---|
+| 1 | 1.0 | 0.0 | +1.0 | 1/1 | **1.0** |
+| 2 | 2.0 | 1.0 | +1.0 | 1/2 | **1.5** |
+| 3 | 6.0 | 1.5 | +4.5 | 1/3 | **3.0** |
+
+Each new estimate is exactly the running mean (1, 1.5, 3.0) — no history
+stored.
 
 **Read this shape carefully — it is the whole course in one line.**
 
@@ -70,21 +149,45 @@ still-untried arm — the optimism does the exploring. Elegant, and it beats
 exploration early; it does nothing if the problem changes later.
 
 ### UCB (Upper Confidence Bound)
+
 Pull the arm maximising
 
 ```
-        ┌──────────┐
-Q(a) + c·│  ln t    │
-         │ ───────  │
-         └  N(a)   ┘        i.e.  Q(a) + c · sqrt(ln t / N(a))
+                  /  ln t  \
+   Q(a)  +  c · \/ ------- 
+                     N(a)
+
+   └ what you  ┘   └ how unsure you are ┘
+     believe
 ```
 
-The second term is an **uncertainty bonus**: large for arms pulled rarely
-(`N(a)` small), shrinking as evidence accumulates, and growing slowly with `t`
-so that a long-neglected arm eventually gets revisited. This is *optimism in
-the face of uncertainty* made explicit — the agent prefers arms that are either
-good or poorly understood, which is precisely the right criterion. UCB achieves
-logarithmic regret.
+In plain code: `Q[a] + c * math.sqrt(math.log(t) / N[a])`.
+
+The first term is exploitation — the arm's current estimated value. The second
+is an **uncertainty bonus**, and reading it piece by piece:
+
+- `N(a)` in the denominator: the more you have pulled an arm, the **smaller**
+  its bonus. Well-understood arms stop getting a handicap.
+- `ln t` in the numerator (the natural logarithm of the current step): this
+  creeps upward as time passes, so an arm ignored for a long stretch slowly
+  becomes attractive again. It grows *slowly* — `ln` doubles only when `t`
+  squares — so this is a gentle nudge, not a reset.
+- `c` scales how much you care about uncertainty at all. `c = 0` is pure
+  greedy; larger `c` explores harder.
+
+Concretely, with `c = 2` and `t = 100`:
+
+| `N(a)` | bonus | meaning |
+|---|---|---|
+| 1 | 4.29 | tried once — huge benefit of the doubt |
+| 10 | 1.36 | some evidence |
+| 100 | 0.43 | well understood, bonus nearly gone |
+
+This is **optimism in the face of uncertainty** made explicit: the agent
+prefers arms that are either *good* or *poorly understood*, which is exactly
+the right criterion. An arm only gets dropped once you are confident it is
+bad — and "confident" is doing real work, since the bonus encodes how much
+evidence you have. UCB achieves logarithmic regret.
 
 ## Your exercises
 
@@ -137,6 +240,30 @@ Things to look for in the output:
   every arm must be tried and found disappointing before the estimates become
   useful — and then overtakes everything. Early exploration is an investment
   that shows up as a loss on the reward panel before it pays.
+
+## Common traps
+
+The tests will name these if you hit them, but they are worth knowing up front
+— each produces code that *looks* like it works.
+
+**Seeding through the global `np.random`.** Your env must draw from
+`self.np_random`, which `super().reset(seed=seed)` sets up. The global
+generator ignores the seed you were handed, so two envs reset with the same
+seed get different problems and nothing is reproducible.
+
+**`np.argmax` for greedy selection.** It always returns the *first* maximum.
+Since `Q` starts all-equal, the agent then tries arm 0 forever and never
+explores — which silently destroys optimistic initialisation, whose entire
+mechanism depends on moving between tied arms. Break ties uniformly at random.
+
+**Overwriting instead of averaging.** `Q[a] = reward` rather than
+`Q[a] += (reward - Q[a]) / N[a]`. The estimate then tracks only the most
+recent pull, and on noisy rewards the agent chases whichever arm last got
+lucky.
+
+**Letting `N(a) == 0` divide.** See the UCB note above: `nan`/`inf` propagate
+into `argmax` and the agent fixates on the lowest-numbered untried arm while
+appearing to sweep correctly.
 
 ## Key takeaways
 
