@@ -69,8 +69,8 @@ RL problems are modelled as a **Markov Decision Process** (MDP), a 5-tuple
 | --- | --- | --- |
 | `S` | state space | `env.observation_space` |
 | `A` | action space | `env.action_space` |
-| \`P(s' | s,a)\` | transition dynamics |
-| `R(s,a,s')` | reward function | the`reward` returned by `env.step` |
+| `P(s'\|s,a)` | transition dynamics | hidden inside `env.step`; you can sample it but not query it |
+| `R(s,a,s')` | reward function | the `reward` returned by `env.step` |
 | `γ` | discount factor | _yours_, not the environment's |
 
 "5-tuple" just means the problem is fully specified once you have pinned down  
