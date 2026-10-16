@@ -145,6 +145,15 @@ class UCBAgent:
     Edge case you must handle: when ``N(a) == 0`` the bonus is infinite, so
     every untried arm must be selected before any tried arm. Treat an untried
     arm as having infinite priority.
+
+    Do this with an explicit check, BEFORE computing any bonuses. It is
+    tempting to let the arithmetic sort itself out, but dividing by
+    ``N(a) == 0`` gives ``inf`` when ``ln t > 0`` and ``nan`` when ``t == 1``
+    (since ``ln 1 == 0``, making it ``0/0``). ``np.argmax`` over values
+    containing ``nan`` returns the FIRST such index, so the agent fixates on
+    the lowest-numbered untried arm rather than spreading over all of them --
+    and it emits a RuntimeWarning while appearing to work. Select uniformly at
+    random among the arms with ``N(a) == 0``.
     """
 
     def __init__(self, k: int, *, c: float = 2.0, rng: np.random.Generator | None = None) -> None:
