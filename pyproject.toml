@@ -1,5 +1,5 @@
 [project]
-name = "reinforcement-learning"
+name = "rl-tutorial"
 version = "0.1.0"
 description = "Learn-by-building reinforcement learning curriculum with Gymnasium"
 readme = "README.md"

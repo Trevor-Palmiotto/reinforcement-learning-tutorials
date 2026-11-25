@@ -15,8 +15,8 @@ Each lesson is a Python package containing:
 
 ## Setup
 
-All commands are run from this directory (`Reinforcement-Learning/`), which is
-a standalone uv project with its own `.venv`.
+All commands are run from this directory (`rl_tutorial/`, the repository
+root), which is a standalone uv project with its own `.venv`.
 
 ```bash
 uv sync
