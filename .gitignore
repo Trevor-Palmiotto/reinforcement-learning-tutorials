@@ -69,3 +69,6 @@ checkpoints/
 *.pt
 *.pth
 *.ckpt
+
+# Claude Code local worktrees
+.claude/worktrees/
